@@ -9,10 +9,11 @@ Runs completely offline on your device without cloud APIs or gigabytes of heavy 
 ## Features
 
 - **Video-First**: Extracts audio, strips background music, and muxes the voice track cleanly back into your video without re-encoding the video stream (`-c:v copy`).
-- **Zero PyTorch Footprint**: Runs via ONNX Runtime with multi-threaded CPU and ARM NEON acceleration (XNNPACK).
+- **Flexible Acceleration**: Supports both **ONNX Runtime** (multi-threaded CPU/NEON) and **Google LiteRT GPU** (OpenCL hardware acceleration on Qualcomm Adreno / Mali GPUs).
+- **Zero Heavy PyTorch**: Runs completely offline without multi-gigabyte PyTorch/CUDA installs.
 - **Format Support**: Supports MP4, MKV, MOV, WebM, FLAC, WAV, MP3, and more.
 - **Android / Termux Native**: Works seamlessly inside Termux on Android, with automatic MediaStore indexing (`content call`) on shared storage.
-- **Auto Model Management**: Automatically downloads the fine-tuned [`UVR-MDX-NET-Voc_FT.onnx`](https://github.com/TRvlvr/model_repo) (~64 MB) on first run.
+- **Auto Model & Delegate Management**: Automatically fetches model weights (`UVR-MDX-NET-Voc_FT.onnx` or `uvr_mdx_voc_ft_fp16.tflite`) and GPU delegates on first run.
 
 ---
 
@@ -21,8 +22,10 @@ Runs completely offline on your device without cloud APIs or gigabytes of heavy 
 ### Termux (Android)
 
 ```bash
-# 1. Install prerequisites
-pkg install -y ffmpeg python-onnxruntime python-numpy curl
+# 1. Install prerequisites (for default ONNX or LiteRT)
+pkg install -y ffmpeg python-numpy curl
+pkg install -y python-onnxruntime     # for ONNX CPU backend (default)
+pkg install -y python-tflite-runtime  # for LiteRT GPU / CPU backend
 
 # 2. Clone repository
 git clone https://github.com/Y-T-G/nomelody.git
@@ -53,18 +56,28 @@ sudo ln -s $(pwd)/nomelody.py /usr/local/bin/nomelody
 
 ## Usage
 
-### 1. Remove background music from video (default)
+### 1. Default (Fast multi-threaded CPU via ONNX Runtime)
 ```bash
 nomelody input_video.mp4
 # Output: input_video (nomelody).mp4
 ```
 
-### 2. Batch processing
+### 2. LiteRT GPU Acceleration (Adreno / OpenCL)
+```bash
+nomelody --backend litert-gpu input_video.mp4
+```
+
+### 3. LiteRT CPU (XNNPACK)
+```bash
+nomelody --backend litert-cpu input_video.mp4
+```
+
+### 4. Batch processing
 ```bash
 nomelody clip1.mp4 clip2.mp4 podcast.mkv
 ```
 
-### 3. Custom output file
+### 5. Custom output file
 ```bash
 nomelody speech.mp4 -o voice_only.mp4
 ```
@@ -74,7 +87,7 @@ nomelody speech.mp4 -o voice_only.mp4
 ## CLI Options
 
 ```text
-usage: nomelody [-h] [-o OUTPUT] [--model MODEL] [-t THREADS] inputs [inputs ...]
+usage: nomelody [-h] [-o OUTPUT] [--backend {onnx,litert-gpu,litert-cpu}] [--model MODEL] [-t THREADS] inputs [inputs ...]
 
 nomelody: Local AI vocal isolation for videos and audio (removes background music/melody)
 
@@ -84,7 +97,9 @@ positional arguments:
 options:
   -h, --help            Show this help message and exit
   -o, --output OUTPUT   Explicit output file path (single file only)
-  --model MODEL         Path to custom MDX-Net ONNX model file
+  --backend {onnx,litert-gpu,litert-cpu}
+                        Inference engine: 'onnx' (CPU NEON, default), 'litert-gpu' (OpenCL GPU delegate), 'litert-cpu' (LiteRT XNNPACK CPU)
+  --model MODEL         Path to custom model file (.onnx or .tflite)
   -t, --threads THREADS Inference worker threads (default: 4)
 ```
 
