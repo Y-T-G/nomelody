@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-vocal-isolate / nomelody: On-device neural vocal and instrumental separation for video and audio.
+nomelody: On-device voice isolation for video and audio (removes music / melody).
 Powered by ONNX Runtime and the UVR MDX-Net architecture.
 
 Model & Architecture Credits:
@@ -57,7 +57,6 @@ def scan_mediastore(path: str):
 
 def process_file(
     input_file: str,
-    mode: str = "vocals",
     output_file: str = None,
     session: ort.InferenceSession = None,
 ):
@@ -68,9 +67,8 @@ def process_file(
     base, ext = os.path.splitext(input_file)
     is_video = ext.lower() in VIDEO_EXTS
 
-    suffix = " (vocals)" if mode == "vocals" else " (instrumental)"
     if not output_file:
-        output_file = f"{base}{suffix}{ext}"
+        output_file = f"{base} (nomelody){ext}"
 
     print(f"\nProcessing: {os.path.basename(input_file)}")
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -162,23 +160,18 @@ def process_file(
 
             recon[:, start:end] += chunk_out * chunk_win
             weight[start:end] += chunk_win
-            print(f"\r  Separating stems: [{idx + 1}/{total_chunks}] chunks", end="", flush=True)
+            print(f"\r  Removing melody: [{idx + 1}/{total_chunks}] chunks", end="", flush=True)
 
         print("")
         valid = weight > 1e-6
         recon[:, valid] /= weight[valid]
         vocal = recon[:, :total_samples] * 1.035
 
-        if mode == "instrumental":
-            final_audio = audio - vocal
-        else:
-            final_audio = vocal
-
-        peak = np.max(np.abs(final_audio))
+        peak = np.max(np.abs(vocal))
         if peak > 0.98:
-            final_audio = final_audio * (0.98 / peak)
+            vocal = vocal * (0.98 / peak)
 
-        out_data = (final_audio.T * 32767.0).astype(np.int16)
+        out_data = (vocal.T * 32767.0).astype(np.int16)
         with wave.open(tmp_out_wav, "wb") as wf:
             wf.setnchannels(2)
             wf.setsampwidth(2)
@@ -212,24 +205,10 @@ def process_file(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Local AI stem separator (vocal and instrumental isolation for videos and audio)"
+        description="nomelody: Local AI vocal isolation for videos and audio (removes background music/melody)"
     )
     parser.add_argument("inputs", nargs="+", help="Input video or audio file(s)")
     parser.add_argument("-o", "--output", help="Explicit output file path (single file only)")
-    parser.add_argument(
-        "--inst",
-        "--instrumental",
-        dest="mode",
-        action="store_const",
-        const="instrumental",
-        default="vocals",
-        help="Keep instrumental instead of vocals",
-    )
-    parser.add_argument(
-        "--both",
-        action="store_true",
-        help="Generate both vocal and instrumental versions",
-    )
     parser.add_argument(
         "--model",
         default=None,
@@ -251,11 +230,7 @@ def main():
     session = ort.InferenceSession(model_file, sess_options=opts)
 
     for inp in args.inputs:
-        if args.both:
-            process_file(inp, mode="vocals", session=session)
-            process_file(inp, mode="instrumental", session=session)
-        else:
-            process_file(inp, mode=args.mode, output_file=args.output, session=session)
+        process_file(inp, output_file=args.output, session=session)
 
 
 if __name__ == "__main__":

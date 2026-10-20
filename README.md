@@ -1,19 +1,18 @@
 # nomelody 🎙️✨
 
-Lightweight, on-device AI vocal and instrumental stem separator for videos and audio files. Powered by **ONNX Runtime** and fine-tuned **MDX-Net** architecture.
+Lightweight, on-device AI voice isolation for videos and audio files. Removes background music and melody while preserving speech, powered by **ONNX Runtime** and the fine-tuned **MDX-Net** architecture.
 
-Runs completely offline without cloud APIs or gigabytes of heavy PyTorch dependencies.
+Runs completely offline on your device without cloud APIs or gigabytes of heavy PyTorch dependencies.
 
 ---
 
 ## Features
 
-- **Video-First**: Extracts audio, separates stems, and muxes directly back into your video without re-encoding the video stream (`-c:v copy`).
-- **Zero PyTorch Footprint**: Uses ONNX Runtime with multi-threaded CPU and ARM NEON acceleration (XNNPACK).
-- **Audio & Video Support**: Supports MP4, MKV, MOV, WebM, FLAC, WAV, MP3, and more.
-- **Vocal & Instrumental Extraction**: Isolate clean vocals, extract karaoke / instrumental backing, or produce both in a single command.
-- **Android / Termux Native**: Seamlessly integrates with Termux on Android, including automatic `content call` indexing into the Android MediaStore.
-- **Auto Model Management**: Automatically downloads the fine-tuned [`UVR-MDX-NET-Voc_FT.onnx`](https://github.com/TRvlvr/model_repo) (~64 MB) on first launch.
+- **Video-First**: Extracts audio, strips background music, and muxes the voice track cleanly back into your video without re-encoding the video stream (`-c:v copy`).
+- **Zero PyTorch Footprint**: Runs via ONNX Runtime with multi-threaded CPU and ARM NEON acceleration (XNNPACK).
+- **Format Support**: Supports MP4, MKV, MOV, WebM, FLAC, WAV, MP3, and more.
+- **Android / Termux Native**: Works seamlessly inside Termux on Android, with automatic MediaStore indexing (`content call`) on shared storage.
+- **Auto Model Management**: Automatically downloads the fine-tuned [`UVR-MDX-NET-Voc_FT.onnx`](https://github.com/TRvlvr/model_repo) (~64 MB) on first run.
 
 ---
 
@@ -46,39 +45,28 @@ cd nomelody
 pip install -r requirements.txt
 
 # 3. Run directly or link to PATH
-chmod +x vocal_isolate.py
-sudo ln -s $(pwd)/vocal_isolate.py /usr/local/bin/nomelody
+chmod +x nomelody.py
+sudo ln -s $(pwd)/nomelody.py /usr/local/bin/nomelody
 ```
 
 ---
 
 ## Usage
 
-### 1. Remove music / isolate voice (default)
+### 1. Remove background music from video (default)
 ```bash
-vocal-isolate input_video.mp4
-# Output: input_video (vocals).mp4
+nomelody input_video.mp4
+# Output: input_video (nomelody).mp4
 ```
 
-### 2. Remove voice / extract instrumental backing
+### 2. Batch processing
 ```bash
-vocal-isolate --inst input_video.mp4
-# Output: input_video (instrumental).mp4
+nomelody clip1.mp4 clip2.mp4 podcast.mkv
 ```
 
-### 3. Generate both vocals and instrumental versions
+### 3. Custom output file
 ```bash
-vocal-isolate --both input_video.mp4
-```
-
-### 4. Batch processing
-```bash
-vocal-isolate clip1.mp4 clip2.mp4 podcast.mkv
-```
-
-### 5. Custom output file
-```bash
-vocal-isolate speech.mp4 -o voice_only.mp4
+nomelody speech.mp4 -o voice_only.mp4
 ```
 
 ---
@@ -86,9 +74,9 @@ vocal-isolate speech.mp4 -o voice_only.mp4
 ## CLI Options
 
 ```text
-usage: vocal-isolate [-h] [-o OUTPUT] [--inst] [--both] [--model MODEL] [-t THREADS] inputs [inputs ...]
+usage: nomelody [-h] [-o OUTPUT] [--model MODEL] [-t THREADS] inputs [inputs ...]
 
-Local AI stem separator (vocal and instrumental isolation for videos and audio)
+nomelody: Local AI vocal isolation for videos and audio (removes background music/melody)
 
 positional arguments:
   inputs                Input video or audio file(s)
@@ -96,9 +84,6 @@ positional arguments:
 options:
   -h, --help            Show this help message and exit
   -o, --output OUTPUT   Explicit output file path (single file only)
-  --inst, --instrumental
-                        Keep instrumental instead of vocals
-  --both                Generate both vocal and instrumental versions
   --model MODEL         Path to custom MDX-Net ONNX model file
   -t, --threads THREADS Inference worker threads (default: 4)
 ```
@@ -110,17 +95,17 @@ options:
 1. **Audio Extraction**: `ffmpeg` extracts the input audio track into a 44.1 kHz stereo PCM stream.
 2. **STFT Spectrogram**: Audio chunks are converted into frequency-domain spectrograms using Short-Time Fourier Transform ($N_{\text{fft}} = 6144$, $\text{hop} = 1024$, $\text{bins} = 3072$).
 3. **Neural Inference**: The ONNX MDX-Net model predicts vocal frequency masks across stereo time-frequency tiles.
-4. **iSTFT & Synthesis**: Inverse STFT reconstructs time-domain audio with Hann overlap-add blending and volume compensation.
-5. **Lossless Video Muxing**: The original video track is paired with the processed audio stream into the final container.
+4. **iSTFT & Synthesis**: Inverse STFT reconstructs time-domain speech with Hann overlap-add blending and volume compensation.
+5. **Lossless Video Muxing**: The original video track is paired with the isolated voice stream into the final container.
 
 ---
 
 ## Acknowledgments & Credits
 
-This tool relies on the vocal separation weights trained by the open-source audio research community:
+This tool relies on vocal separation models trained by the open-source audio research community:
 
+- **[Kimberley Jensen](https://github.com/KimberleyJensen)** – Implemented training pipelines and fine-tuned the MDX-Net vocal separation models (`Voc_FT` / `Kim_Vocal`).
 - **[Anjok07](https://github.com/Anjok07)** and **[TRvlvr](https://github.com/TRvlvr)** – Creators and core maintainers of [Ultimate Vocal Remover (UVR)](https://github.com/Anjok07/ultimatevocalremovergui) and the [TRvlvr/model_repo](https://github.com/TRvlvr/model_repo) checkpoint repository.
-- **[Kimberley Jensen](https://github.com/KimberleyJensen)** – Implemented training pipelines and trained/fine-tuned the MDX-Net vocal separation models (`Voc_FT` / `Kim_Vocal`).
 - **[Kuielab & Woosung Choi](https://github.com/kuielab)** – Original creators of the [MDX-Net](https://github.com/kuielab/mdx-net) architecture (Sony Music Demixing Challenge 2021).
 
 ---
