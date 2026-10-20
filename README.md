@@ -1,4 +1,4 @@
-# vocal-isolate 🎙️✨
+# nomelody 🎙️✨
 
 Lightweight, on-device AI vocal and instrumental stem separator for videos and audio files. Powered by **ONNX Runtime** and fine-tuned **MDX-Net** architecture.
 
@@ -26,8 +26,8 @@ Runs completely offline without cloud APIs or gigabytes of heavy PyTorch depende
 pkg install -y ffmpeg python-onnxruntime python-numpy curl
 
 # 2. Clone repository
-git clone https://github.com/Y-T-G/vocal-isolate.git
-cd vocal-isolate
+git clone https://github.com/Y-T-G/nomelody.git
+cd nomelody
 
 # 3. Install executable into ~/bin
 ./install.sh
@@ -41,13 +41,13 @@ cd vocal-isolate
 # Debian/Ubuntu: sudo apt install ffmpeg
 
 # 2. Clone repository & install python dependencies
-git clone https://github.com/Y-T-G/vocal-isolate.git
-cd vocal-isolate
+git clone https://github.com/Y-T-G/nomelody.git
+cd nomelody
 pip install -r requirements.txt
 
 # 3. Run directly or link to PATH
 chmod +x vocal_isolate.py
-sudo ln -s $(pwd)/vocal_isolate.py /usr/local/bin/vocal-isolate
+sudo ln -s $(pwd)/vocal_isolate.py /usr/local/bin/nomelody
 ```
 
 ---

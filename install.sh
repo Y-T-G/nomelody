@@ -6,6 +6,7 @@ BIN_DIR="${PREFIX:-/usr/local}/bin"
 
 mkdir -p "$BIN_DIR"
 chmod +x "$(dirname "$0")/vocal_isolate.py"
-cp "$(dirname "$0")/vocal_isolate.py" "$BIN_DIR/vocal-isolate"
+cp "$(dirname "$0")/vocal_isolate.py" "$BIN_DIR/nomelody"
+ln -sf "$BIN_DIR/nomelody" "$BIN_DIR/vocal-isolate"
 
-echo "Installed vocal-isolate into $BIN_DIR/vocal-isolate"
+echo "Installed nomelody (and alias vocal-isolate) into $BIN_DIR/"
