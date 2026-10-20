@@ -1,0 +1,12 @@
+*.onnx
+*.wav
+*.mp3
+*.mp4
+*.mkv
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+dist/
+build/
+*.egg-info/
