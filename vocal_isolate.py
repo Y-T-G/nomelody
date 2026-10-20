@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-vocal-isolate: On-device neural vocal and instrumental separation for video and audio.
+vocal-isolate / nomelody: On-device neural vocal and instrumental separation for video and audio.
 Powered by ONNX Runtime and the UVR MDX-Net architecture.
+
+Model & Architecture Credits:
+- Model Weights: UVR-MDX-NET-Voc_FT fine-tuned by Kimberley Jensen (KimberleyJSN).
+- UVR Ecosystem: Anjok07 & TRvlvr (https://github.com/Anjok07/ultimatevocalremovergui).
+- MDX-Net Architecture: Kuielab & Woosung Choi (https://github.com/kuielab/mdx-net).
 """
 
 import os

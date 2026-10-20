@@ -115,6 +115,16 @@ options:
 
 ---
 
+## Acknowledgments & Credits
+
+This tool relies on the vocal separation weights trained by the open-source audio research community:
+
+- **[Anjok07](https://github.com/Anjok07)** and **[TRvlvr](https://github.com/TRvlvr)** – Creators and core maintainers of [Ultimate Vocal Remover (UVR)](https://github.com/Anjok07/ultimatevocalremovergui) and the [TRvlvr/model_repo](https://github.com/TRvlvr/model_repo) checkpoint repository.
+- **[Kimberley Jensen](https://github.com/KimberleyJensen)** – Implemented training pipelines and trained/fine-tuned the MDX-Net vocal separation models (`Voc_FT` / `Kim_Vocal`).
+- **[Kuielab & Woosung Choi](https://github.com/kuielab)** – Original creators of the [MDX-Net](https://github.com/kuielab/mdx-net) architecture (Sony Music Demixing Challenge 2021).
+
+---
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
