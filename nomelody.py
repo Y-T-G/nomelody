@@ -46,6 +46,7 @@ ONNX_MODEL_URL = f"https://github.com/TRvlvr/model_repo/releases/download/all_pu
 
 INT8_MODEL_NAME = "UVR-MDX-NET-Voc_FT_int8_calibrated.onnx"
 INT8_MODEL_PATH = os.path.join(MODEL_DIR, INT8_MODEL_NAME)
+INT8_MODEL_URL = f"https://github.com/Y-T-G/nomelody/releases/download/v0.1.0/{INT8_MODEL_NAME}"
 
 TFLITE_MODEL_NAME = "uvr_mdx_voc_ft_fp16.tflite"
 TFLITE_MODEL_PATH = os.path.join(MODEL_DIR, TFLITE_MODEL_NAME)
@@ -116,37 +117,41 @@ def ensure_file(path: str, url: str, desc: str, min_size: int = 1_000_000):
 def ensure_int8_model(fp32_path: str, int8_path: str):
     if os.path.isfile(int8_path) and os.path.getsize(int8_path) >= 10_000_000:
         return
-    ensure_file(fp32_path, ONNX_MODEL_URL, "ONNX FP32 base model (Voc_FT)")
-    print("Calibrating static INT8 quantized model for high CPU throughput...")
     try:
-        from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormat
-
-        class SyntheticAudioCalibrator(CalibrationDataReader):
-            def __init__(self):
-                # Frequency-sloped calibration data simulating real audio spectrogram energy decay
-                freq_profile = 1.0 / np.linspace(1, 20, 3072)[:, None].astype(np.float32)
-                self.data = [
-                    (np.random.randn(1, 4, 3072, 256).astype(np.float32) * freq_profile)
-                    for _ in range(8)
-                ]
-                self.enum = iter(self.data)
-
-            def get_next(self):
-                t = next(self.enum, None)
-                return {"input": t} if t is not None else None
-
-        quantize_static(
-            model_input=fp32_path,
-            model_output=int8_path,
-            calibration_data_reader=SyntheticAudioCalibrator(),
-            quant_format=QuantFormat.QDQ,
-            weight_type=QuantType.QInt8,
-            activation_type=QuantType.QUInt8,
-            per_channel=True,
-        )
-        print(f"  Generated calibrated INT8 model ({os.path.getsize(int8_path)/1e6:.1f}MB)")
+        ensure_file(int8_path, INT8_MODEL_URL, "Calibrated static INT8 model (17 MB)", min_size=10_000_000)
     except Exception as e:
-        print(f"Static quantization failed ({e}), falling back to FP32 model.")
+        print(f"Direct download of INT8 model failed ({e}), falling back to local calibration...")
+        ensure_file(fp32_path, ONNX_MODEL_URL, "ONNX FP32 base model (Voc_FT)")
+        print("Calibrating static INT8 quantized model for high CPU throughput...")
+        try:
+            from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormat
+
+            class SyntheticAudioCalibrator(CalibrationDataReader):
+                def __init__(self):
+                    # Frequency-sloped calibration data simulating real audio spectrogram energy decay
+                    freq_profile = 1.0 / np.linspace(1, 20, 3072)[:, None].astype(np.float32)
+                    self.data = [
+                        (np.random.randn(1, 4, 3072, 256).astype(np.float32) * freq_profile)
+                        for _ in range(8)
+                    ]
+                    self.enum = iter(self.data)
+
+                def get_next(self):
+                    t = next(self.enum, None)
+                    return {"input": t} if t is not None else None
+
+            quantize_static(
+                model_input=fp32_path,
+                model_output=int8_path,
+                calibration_data_reader=SyntheticAudioCalibrator(),
+                quant_format=QuantFormat.QDQ,
+                weight_type=QuantType.QInt8,
+                activation_type=QuantType.QUInt8,
+                per_channel=True,
+            )
+            print(f"  Generated calibrated INT8 model ({os.path.getsize(int8_path)/1e6:.1f}MB)")
+        except Exception as err:
+            print(f"Static quantization failed ({err}), falling back to FP32 model.")
 
 
 def ensure_gpu_delegate():
