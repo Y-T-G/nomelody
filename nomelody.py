@@ -557,7 +557,12 @@ def get_stream_urls(target: str, quality: int = 720) -> dict:
     else:
         query = target
 
-    fmt = f"bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best"
+    fmt = (
+        f"bestvideo[height<={quality}][vcodec^=avc1]+bestaudio[ext=m4a]/"
+        f"bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a]/"
+        f"bestvideo[height<={quality}]+bestaudio/"
+        f"best[height<={quality}]/best"
+    )
     opts = {
         "format": fmt,
         "quiet": True,
@@ -631,6 +636,7 @@ class LiveFilterEngine:
 
         self.filtered_pcm_queue = queue.Queue(maxsize=30)
         self.subscribers = []
+        self.chunk_history = []
         self.sub_lock = threading.Lock()
         self.stop_event = threading.Event()
         self.prebuffer_ready = threading.Event()
@@ -642,10 +648,15 @@ class LiveFilterEngine:
         self.status = "Initializing"
 
     def subscribe(self) -> queue.Queue:
-        q = queue.Queue(maxsize=100)
         with self.sub_lock:
+            q = queue.Queue(maxsize=max(500, len(self.chunk_history) + 200))
+            for c in self.chunk_history:
+                try:
+                    q.put_nowait(c)
+                except Exception:
+                    pass
             self.subscribers.append(q)
-        return q
+            return q
 
     def unsubscribe(self, q: queue.Queue):
         with self.sub_lock:
@@ -653,15 +664,26 @@ class LiveFilterEngine:
                 self.subscribers.remove(q)
 
     def _broadcast(self, data: bytes):
-        self.bytes_muxed += len(data)
-        with self.sub_lock:
-            for q in list(self.subscribers):
-                try:
-                    q.put_nowait(data)
-                except queue.Full:
+        if data:
+            self.bytes_muxed += len(data)
+            with self.sub_lock:
+                self.chunk_history.append(data)
+                while sum(len(c) for c in self.chunk_history) > 60 * 1024 * 1024:
+                    self.chunk_history.pop(0)
+                for q in list(self.subscribers):
                     try:
-                        q.get_nowait()
                         q.put_nowait(data)
+                    except queue.Full:
+                        try:
+                            q.get_nowait()
+                            q.put_nowait(data)
+                        except Exception:
+                            pass
+        else:
+            with self.sub_lock:
+                for q in list(self.subscribers):
+                    try:
+                        q.put_nowait(b"")
                     except Exception:
                         pass
 
@@ -869,6 +891,9 @@ class LiveStreamHandler(http.server.BaseHTTPRequestHandler):
             ctype = "video/mp4" if self.engine.stream_format == "mp4" else "video/x-matroska"
             self.send_response(200)
             self.send_header("Content-Type", ctype)
+            self.send_header("Accept-Ranges", "none")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
             self.send_header("Connection", "close")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
@@ -932,7 +957,7 @@ class LiveStreamHandler(http.server.BaseHTTPRequestHandler):
 </head>
 <body>
 <div class="player-box">
-  <video id="video" controls autoplay playsinline src="{stream_src}"></video>
+  <video id="video" controls autoplay playsinline></video>
   <div class="content">
     <h2>{self.title}</h2>
     <div class="tags">
@@ -947,6 +972,71 @@ class LiveStreamHandler(http.server.BaseHTTPRequestHandler):
   </div>
 </div>
 <script>
+  const video = document.getElementById('video');
+  const streamSrc = '{stream_src}';
+
+  async function startPlayback() {{
+    if (window.MediaSource && streamSrc.endsWith('.mp4')) {{
+      const ms = new MediaSource();
+      video.src = URL.createObjectURL(ms);
+      ms.addEventListener('sourceopen', async () => {{
+        try {{
+          const candidates = [
+            'video/mp4; codecs="avc1.4D401F, mp4a.40.2"',
+            'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+            'video/mp4; codecs="avc1, mp4a.40.2"',
+            'video/mp4'
+          ];
+          const chosen = candidates.find(c => MediaSource.isTypeSupported(c)) || 'video/mp4';
+          const sb = ms.addSourceBuffer(chosen);
+          sb.mode = 'sequence';
+
+          const res = await fetch(streamSrc);
+          const reader = res.body.getReader();
+          const queue = [];
+          let updating = false;
+
+          function pushNext() {{
+            if (!updating && queue.length > 0 && !sb.updating) {{
+              updating = true;
+              sb.appendBuffer(queue.shift());
+            }}
+          }}
+
+          sb.addEventListener('updateend', () => {{
+            updating = false;
+            pushNext();
+            if (video.paused && video.buffered.length > 0) {{
+              video.play().catch(() => {{
+                video.muted = true;
+                video.play().catch(() => {{}});
+              }});
+            }}
+          }});
+
+          while (true) {{
+            const {{ done, value }} = await reader.read();
+            if (done) {{
+              if (ms.readyState === 'open') ms.endOfStream();
+              break;
+            }}
+            queue.push(value);
+            pushNext();
+          }}
+        }} catch(err) {{
+          console.warn('MSE streaming error, falling back to direct video.src:', err);
+          video.src = streamSrc;
+          video.play().catch(() => {{ video.muted = true; video.play().catch(() => {{}}); }});
+        }}
+      }});
+    }} else {{
+      video.src = streamSrc;
+      video.play().catch(() => {{ video.muted = true; video.play().catch(() => {{}}); }});
+    }}
+  }}
+
+  startPlayback();
+
   setInterval(async () => {{
     try {{
       const res = await fetch('/stats');
