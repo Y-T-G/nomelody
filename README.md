@@ -64,14 +64,18 @@ nomelody input_video.mp4
 # Output: input_video (nomelody).mp4
 ```
 
-### 2. High-Speed INT8 CPU Quantization
+### 2. High-Speed Static INT8 Quantization (Fastest CPU mode, ~2.8x realtime)
 ```bash
 nomelody --precision int8 input_video.mp4
+# Or with LiteRT XNNPACK:
+nomelody --backend litert-cpu --precision int8 input_video.mp4
 ```
 
-### 3. LiteRT GPU Acceleration (Adreno / OpenCL)
+### 3. LiteRT GPU Acceleration (Adreno / OpenCL, defaults to static FP16)
 ```bash
 nomelody --backend litert-gpu input_video.mp4
+# Or explicitly select FP16 / FP32 / INT8:
+nomelody --backend litert-gpu --precision fp16 input_video.mp4
 ```
 
 ### 4. LiteRT CPU (XNNPACK)

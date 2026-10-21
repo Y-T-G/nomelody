@@ -190,11 +190,13 @@ class ModelRunner:
         custom_model: str = None,
         threads: int = None,
         batch_size: int = 1,
-        precision: str = "fp32",
+        precision: str = None,
     ):
         self.backend = backend
         self.threads = get_optimal_threads(threads)
         self.batch_size = max(1, batch_size)
+        if precision is None:
+            precision = "fp16" if backend == "litert-gpu" else "fp32"
         self.precision = precision
 
         if backend == "onnx":
@@ -212,6 +214,8 @@ class ModelRunner:
                 if not os.path.isfile(model_path):
                     model_path = ONNX_MODEL_PATH
             else:
+                if precision == "fp16":
+                    print("Notice: FP16 precision requested on ONNX backend; using FP32 ONNX model.")
                 model_path = ONNX_MODEL_PATH
                 ensure_file(model_path, ONNX_MODEL_URL, "ONNX model (Voc_FT)")
 
@@ -272,12 +276,12 @@ class ModelRunner:
             elif precision == "int8":
                 model_path = TFLITE_INT8_PATH
                 ensure_file(model_path, TFLITE_INT8_URL, "LiteRT INT8 model (Voc_FT)")
-            elif precision == "fp32" or backend == "litert-cpu":
-                model_path = TFLITE_FP32_PATH
-                ensure_file(model_path, TFLITE_FP32_URL, "LiteRT FP32 model (Voc_FT)")
-            else:
+            elif precision == "fp16":
                 model_path = TFLITE_MODEL_PATH
                 ensure_file(model_path, TFLITE_MODEL_URL, "LiteRT FP16 model (Voc_FT)")
+            else:
+                model_path = TFLITE_FP32_PATH
+                ensure_file(model_path, TFLITE_FP32_URL, "LiteRT FP32 model (Voc_FT)")
 
             delegates = []
             if backend == "litert-gpu":
@@ -535,9 +539,9 @@ def main():
     )
     parser.add_argument(
         "--precision",
-        choices=["fp32", "int8"],
-        default="fp32",
-        help="Inference precision: 'fp32' (default, full precision) or 'int8' (calibrated static INT8, ~2.8x faster on CPU, 75%% smaller model)",
+        choices=["fp32", "fp16", "int8"],
+        default=None,
+        help="Inference precision: 'fp32' (full precision), 'fp16' (fast static FP16, default for litert-gpu), or 'int8' (static INT8, fastest CPU throughput)",
     )
     parser.add_argument(
         "--model",
