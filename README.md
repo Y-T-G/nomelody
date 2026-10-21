@@ -81,7 +81,16 @@ nomelody --backend litert-gpu input_video.mp4
 nomelody --backend litert-gpu --precision fp16 input_video.mp4
 ```
 
-### 4. LiteRT CPU (XNNPACK)
+### 4. Intel / AMD CPU Acceleration via OpenVINO
+```bash
+# Ultra-fast CPU inference via native OpenVINO:
+nomelody --backend openvino --precision int8 input_video.mp4
+
+# Full precision FP32 with OpenVINO:
+nomelody --backend openvino --precision fp32 input_video.mp4
+```
+
+### 5. LiteRT CPU (XNNPACK)
 ```bash
 nomelody --backend litert-cpu input_video.mp4
 ```

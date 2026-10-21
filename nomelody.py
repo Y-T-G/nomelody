@@ -252,6 +252,7 @@ class ModelRunner:
             else:
                 preferred = [
                     "CUDAExecutionProvider",
+                    "OpenVINOExecutionProvider",
                     "DmlExecutionProvider",
                     "CoreMLExecutionProvider",
                     "CPUExecutionProvider",
@@ -281,6 +282,49 @@ class ModelRunner:
                 return self.session.run(None, {self.input_name: x})[0]
 
             self.infer_fn = _onnx_infer
+
+        elif backend == "openvino":
+            try:
+                import openvino as ov
+            except ImportError:
+                print("Error: openvino not found. Install via 'pip install openvino'.", file=sys.stderr)
+                sys.exit(1)
+
+            if custom_model:
+                model_path = custom_model
+            elif precision == "int8":
+                model_path = INT8_MODEL_PATH
+                ensure_int8_model(ONNX_MODEL_PATH, INT8_MODEL_PATH)
+                if not os.path.isfile(model_path):
+                    model_path = ONNX_MODEL_PATH
+            else:
+                model_path = ONNX_MODEL_PATH
+                ensure_file(model_path, ONNX_MODEL_URL, "ONNX model (Voc_FT)")
+
+            core = ov.Core()
+            ov_device = "CPU"
+            if self.device == "gpu" and "GPU" in core.available_devices:
+                ov_device = "GPU"
+            elif self.device in ("cpu", "auto"):
+                ov_device = "CPU"
+
+            config = {}
+            if self.threads:
+                config["INFERENCE_NUM_THREADS"] = str(self.threads)
+
+            model = core.read_model(model_path)
+            self.compiled_model = core.compile_model(model, ov_device, config)
+            active_device = core.get_property(ov_device, "FULL_DEVICE_NAME") if ov_device in core.available_devices else ov_device
+            print(f"  Engine: OpenVINO [{ov_device}: {active_device}] | Precision: {self.precision.upper()} | Threads: {self.threads} | Batch size: {self.batch_size}")
+
+            def _openvino_infer(x: np.ndarray) -> np.ndarray:
+                B = x.shape[0]
+                if B == 1:
+                    return self.compiled_model([x])[0]
+                outs = [self.compiled_model([x[i : i + 1]])[0] for i in range(B)]
+                return np.concatenate(outs, axis=0)
+
+            self.infer_fn = _openvino_infer
 
         elif backend in ("litert-gpu", "litert-cpu"):
             try:
@@ -1213,15 +1257,15 @@ def main():
     )
     parser.add_argument(
         "--backend",
-        choices=["onnx", "onnx-cpu", "litert-gpu", "litert-cpu"],
+        choices=["onnx", "onnx-cpu", "openvino", "litert-gpu", "litert-cpu"],
         default=None,
-        help="Inference engine: 'onnx' (default, multi-provider GPU/CPU), 'onnx-cpu' (forced CPU ONNX Runtime), 'litert-gpu' (default for live mode, OpenCL GPU), 'litert-cpu' (LiteRT XNNPACK CPU)",
+        help="Inference engine: 'onnx' (default, multi-provider GPU/CPU), 'onnx-cpu' (forced CPU ONNX Runtime), 'openvino' (Intel OpenVINO runtime), 'litert-gpu' (default for live mode, OpenCL GPU), 'litert-cpu' (LiteRT XNNPACK CPU)",
     )
     parser.add_argument(
         "--device",
         choices=["auto", "cpu", "gpu"],
         default="auto",
-        help="Execution target device for ONNX: 'auto' (default), 'cpu' (forces CPU inference), or 'gpu'",
+        help="Execution target device for ONNX/OpenVINO: 'auto' (default), 'cpu' (forces CPU inference), or 'gpu'",
     )
     parser.add_argument(
         "--precision",
