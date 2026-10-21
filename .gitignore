@@ -1,4 +1,7 @@
 *.onnx
+*.tflite
+*.bin
+*.param
 *.wav
 *.mp3
 *.mp4

@@ -55,6 +55,14 @@ TFLITE_MODEL_NAME = "uvr_mdx_voc_ft_fp16.tflite"
 TFLITE_MODEL_PATH = os.path.join(MODEL_DIR, TFLITE_MODEL_NAME)
 TFLITE_MODEL_URL = f"{ASSET_BASE_URL}/{TFLITE_MODEL_NAME}"
 
+TFLITE_FP32_NAME = "uvr_mdx_voc_ft_fp32.tflite"
+TFLITE_FP32_PATH = os.path.join(MODEL_DIR, TFLITE_FP32_NAME)
+TFLITE_FP32_URL = f"{ASSET_BASE_URL}/{TFLITE_FP32_NAME}"
+
+TFLITE_INT8_NAME = "uvr_mdx_voc_ft_int8.tflite"
+TFLITE_INT8_PATH = os.path.join(MODEL_DIR, TFLITE_INT8_NAME)
+TFLITE_INT8_URL = f"{ASSET_BASE_URL}/{TFLITE_INT8_NAME}"
+
 GPU_DELEGATE_SO = os.path.join(LIB_DIR, "libtflite_gpu_delegate.so")
 GPU_DELEGATE_URL = f"{ASSET_BASE_URL}/libtflite_gpu_delegate.so"
 
@@ -253,8 +261,17 @@ class ModelRunner:
                 print("Error: tflite_runtime not found. Install via 'pkg install python-tflite-runtime'.", file=sys.stderr)
                 sys.exit(1)
 
-            model_path = custom_model or TFLITE_MODEL_PATH
-            ensure_file(model_path, TFLITE_MODEL_URL, "LiteRT FP16 model (Voc_FT)")
+            if custom_model:
+                model_path = custom_model
+            elif precision == "int8":
+                model_path = TFLITE_INT8_PATH
+                ensure_file(model_path, TFLITE_INT8_URL, "LiteRT INT8 model (Voc_FT)")
+            elif precision == "fp32" or backend == "litert-cpu":
+                model_path = TFLITE_FP32_PATH
+                ensure_file(model_path, TFLITE_FP32_URL, "LiteRT FP32 model (Voc_FT)")
+            else:
+                model_path = TFLITE_MODEL_PATH
+                ensure_file(model_path, TFLITE_MODEL_URL, "LiteRT FP16 model (Voc_FT)")
 
             delegates = []
             if backend == "litert-gpu":
@@ -268,22 +285,33 @@ class ModelRunner:
                 experimental_delegates=delegates if delegates else None,
             )
             self.interp.allocate_tensors()
-            self.in_idx = self.interp.get_input_details()[0]["index"]
+            in_details = self.interp.get_input_details()[0]
+            self.in_idx = in_details["index"]
             self.out_idx = self.interp.get_output_details()[0]["index"]
-            print(f"  Engine: LiteRT [{backend}] | Threads: {self.threads} | Batch size: {self.batch_size}")
+            in_shape = list(in_details["shape"])
+            # Auto-detect whether model expects NHWC [B, 3072, 256, 4] or legacy NCHW [B, 4, 3072, 256]
+            self.is_nhwc = len(in_shape) == 4 and in_shape[-1] == 4
+
+            print(f"  Engine: LiteRT [{backend}] | Precision: {precision.upper()} | Threads: {self.threads} | Batch size: {self.batch_size}")
 
             def _tflite_infer(x: np.ndarray) -> np.ndarray:
+                if self.is_nhwc:
+                    x = np.transpose(x, (0, 2, 3, 1))
                 B = x.shape[0]
                 if B == 1:
                     self.interp.set_tensor(self.in_idx, x)
                     self.interp.invoke()
-                    return self.interp.get_tensor(self.out_idx)
-                outs = []
-                for i in range(B):
-                    self.interp.set_tensor(self.in_idx, x[i : i + 1])
-                    self.interp.invoke()
-                    outs.append(self.interp.get_tensor(self.out_idx))
-                return np.concatenate(outs, axis=0)
+                    res = self.interp.get_tensor(self.out_idx)
+                else:
+                    outs = []
+                    for i in range(B):
+                        self.interp.set_tensor(self.in_idx, x[i : i + 1])
+                        self.interp.invoke()
+                        outs.append(self.interp.get_tensor(self.out_idx))
+                    res = np.concatenate(outs, axis=0)
+                if self.is_nhwc:
+                    res = np.transpose(res, (0, 3, 1, 2))
+                return res
 
             self.infer_fn = _tflite_infer
 
@@ -503,7 +531,7 @@ def main():
         "--precision",
         choices=["fp32", "int8"],
         default="fp32",
-        help="Inference precision: 'fp32' (default, full precision) or 'int8' (calibrated static INT8, ~2.8x faster on CPU, 75% smaller model)",
+        help="Inference precision: 'fp32' (default, full precision) or 'int8' (calibrated static INT8, ~2.8x faster on CPU, 75%% smaller model)",
     )
     parser.add_argument(
         "--model",
