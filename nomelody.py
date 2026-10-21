@@ -258,8 +258,14 @@ class ModelRunner:
             try:
                 import tflite_runtime.interpreter as tflite
             except ImportError:
-                print("Error: tflite_runtime not found. Install via 'pkg install python-tflite-runtime'.", file=sys.stderr)
-                sys.exit(1)
+                try:
+                    import ai_edge_litert.interpreter as tflite
+                except ImportError:
+                    try:
+                        import tensorflow.lite as tflite
+                    except ImportError:
+                        print("Error: LiteRT runtime not found. Install via 'pkg install python-tflite-runtime' (Android) or 'pip install ai-edge-litert'.", file=sys.stderr)
+                        sys.exit(1)
 
             if custom_model:
                 model_path = custom_model
