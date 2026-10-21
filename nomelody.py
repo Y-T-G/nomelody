@@ -40,20 +40,23 @@ except ImportError:
 MODEL_DIR = os.path.expanduser("~/.local/share/models")
 LIB_DIR = os.path.expanduser("~/.local/lib")
 
+RELEASE_TAG = "v0.1.0"
+ASSET_BASE_URL = f"https://github.com/Y-T-G/nomelody/releases/download/{RELEASE_TAG}"
+
 ONNX_MODEL_NAME = "UVR-MDX-NET-Voc_FT.onnx"
 ONNX_MODEL_PATH = os.path.join(MODEL_DIR, ONNX_MODEL_NAME)
-ONNX_MODEL_URL = f"https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/{ONNX_MODEL_NAME}"
+ONNX_MODEL_URL = f"{ASSET_BASE_URL}/{ONNX_MODEL_NAME}"
 
 INT8_MODEL_NAME = "UVR-MDX-NET-Voc_FT_int8_calibrated.onnx"
 INT8_MODEL_PATH = os.path.join(MODEL_DIR, INT8_MODEL_NAME)
-INT8_MODEL_URL = f"https://github.com/Y-T-G/nomelody/releases/download/v0.1.0/{INT8_MODEL_NAME}"
+INT8_MODEL_URL = f"{ASSET_BASE_URL}/{INT8_MODEL_NAME}"
 
 TFLITE_MODEL_NAME = "uvr_mdx_voc_ft_fp16.tflite"
 TFLITE_MODEL_PATH = os.path.join(MODEL_DIR, TFLITE_MODEL_NAME)
-TFLITE_MODEL_URL = f"https://huggingface.co/skytrix/kirexa-mdx-tflite/resolve/main/{TFLITE_MODEL_NAME}"
+TFLITE_MODEL_URL = f"{ASSET_BASE_URL}/{TFLITE_MODEL_NAME}"
 
 GPU_DELEGATE_SO = os.path.join(LIB_DIR, "libtflite_gpu_delegate.so")
-GPU_DELEGATE_AAR_URL = "https://repo1.maven.org/maven2/org/tensorflow/tensorflow-lite-gpu/2.16.1/tensorflow-lite-gpu-2.16.1.aar"
+GPU_DELEGATE_URL = f"{ASSET_BASE_URL}/libtflite_gpu_delegate.so"
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".flv", ".ts", ".m4v"}
 
@@ -157,15 +160,12 @@ def ensure_int8_model(fp32_path: str, int8_path: str):
 def ensure_gpu_delegate():
     if os.path.isfile(GPU_DELEGATE_SO) and os.path.getsize(GPU_DELEGATE_SO) > 500_000:
         return
-    os.makedirs(LIB_DIR, exist_ok=True)
-    print("Downloading LiteRT GPU acceleration delegate (libtflite_gpu_delegate.so)...")
-    with tempfile.NamedTemporaryFile(suffix=".aar") as tmp_aar:
-        subprocess.run(["curl", "-sL", "-o", tmp_aar.name, GPU_DELEGATE_AAR_URL], check=True)
-        subprocess.run(
-            ["unzip", "-p", tmp_aar.name, "jni/arm64-v8a/libtensorflowlite_gpu_jni.so"],
-            stdout=open(GPU_DELEGATE_SO, "wb"),
-            check=True,
-        )
+    ensure_file(
+        GPU_DELEGATE_SO,
+        GPU_DELEGATE_URL,
+        "LiteRT GPU acceleration delegate (libtflite_gpu_delegate.so)",
+        min_size=500_000,
+    )
 
 
 def scan_mediastore(path: str):
