@@ -204,15 +204,17 @@ class ModelRunner:
         threads: int = None,
         batch_size: int = 1,
         precision: str = None,
+        device: str = "auto",
     ):
         self.backend = backend
+        self.device = device
         self.threads = get_optimal_threads(threads)
         self.batch_size = max(1, batch_size)
         if precision is None:
             precision = "fp16" if backend == "litert-gpu" else "fp32"
         self.precision = precision
 
-        if backend == "onnx":
+        if backend in ("onnx", "onnx-cpu"):
             try:
                 import onnxruntime as ort
             except ImportError:
@@ -239,13 +241,22 @@ class ModelRunner:
             opts.inter_op_num_threads = 1
 
             available_providers = ort.get_available_providers()
-            preferred = [
-                "CUDAExecutionProvider",
-                "DmlExecutionProvider",
-                "CoreMLExecutionProvider",
-                "CPUExecutionProvider",
-            ]
-            providers = [p for p in preferred if p in available_providers] or available_providers
+            if backend == "onnx-cpu" or device == "cpu":
+                providers = ["CPUExecutionProvider"]
+            elif device == "gpu":
+                preferred = ["CUDAExecutionProvider", "DmlExecutionProvider", "CoreMLExecutionProvider"]
+                providers = [p for p in preferred if p in available_providers]
+                if not providers:
+                    print("Warning: GPU device requested, but no GPU provider found in onnxruntime. Falling back to CPU.")
+                    providers = ["CPUExecutionProvider"]
+            else:
+                preferred = [
+                    "CUDAExecutionProvider",
+                    "DmlExecutionProvider",
+                    "CoreMLExecutionProvider",
+                    "CPUExecutionProvider",
+                ]
+                providers = [p for p in preferred if p in available_providers] or available_providers
 
             # Attempt each provider in priority order with graceful fallback
             session = None
@@ -1202,9 +1213,15 @@ def main():
     )
     parser.add_argument(
         "--backend",
-        choices=["onnx", "litert-gpu", "litert-cpu"],
+        choices=["onnx", "onnx-cpu", "litert-gpu", "litert-cpu"],
         default=None,
-        help="Inference engine: 'litert-gpu' (default for live mode, OpenCL GPU), 'litert-cpu' (LiteRT XNNPACK CPU), 'onnx' (default for offline files)",
+        help="Inference engine: 'onnx' (default, multi-provider GPU/CPU), 'onnx-cpu' (forced CPU ONNX Runtime), 'litert-gpu' (default for live mode, OpenCL GPU), 'litert-cpu' (LiteRT XNNPACK CPU)",
+    )
+    parser.add_argument(
+        "--device",
+        choices=["auto", "cpu", "gpu"],
+        default="auto",
+        help="Execution target device for ONNX: 'auto' (default), 'cpu' (forces CPU inference), or 'gpu'",
     )
     parser.add_argument(
         "--precision",
@@ -1264,6 +1281,7 @@ def main():
         threads=args.threads,
         batch_size=args.batch_size,
         precision=args.precision,
+        device=args.device,
     )
 
     if live_target:

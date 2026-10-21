@@ -68,6 +68,8 @@ nomelody input_video.mp4
 ### 2. High-Speed Static INT8 Quantization (Fastest CPU mode, ~2.8x realtime)
 ```bash
 nomelody --precision int8 input_video.mp4
+# Force CPU inference without GPU/DirectML:
+nomelody --backend onnx-cpu --precision int8 input_video.mp4
 # Or with LiteRT XNNPACK:
 nomelody --backend litert-cpu --precision int8 input_video.mp4
 ```
