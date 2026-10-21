@@ -189,11 +189,30 @@ def ensure_gpu_delegate():
     )
 
 
-def scan_mediastore(path: str):
-    abs_p = os.path.abspath(path)
-    if abs_p.startswith(("/storage/emulated/0", "/sdcard", "/data/media/0")):
-        cmd = f'content call --uri content://media --method scan_file --arg "{abs_p}"'
-        subprocess.run(["su", "-c", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def scan_mediastore(path: str, verbose: bool = True) -> bool:
+    real_p = os.path.realpath(os.path.expanduser(path))
+    is_android = os.path.exists("/system") or bool(os.environ.get("ANDROID_ROOT")) or bool(os.environ.get("TERMUX_VERSION"))
+    if not is_android:
+        return False
+
+    cmd = f'content call --uri content://media --method scan_file --arg "{real_p}"'
+    try:
+        if shutil.which("su"):
+            res = subprocess.run(["su", "-c", cmd], capture_output=True, text=True, timeout=10)
+        else:
+            res = subprocess.run(
+                ["content", "call", "--uri", "content://media", "--method", "scan_file", "--arg", real_p],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        if verbose and res.returncode == 0:
+            print(f"  [MediaStore] Force scanned: {real_p}")
+        return res.returncode == 0
+    except Exception as e:
+        if verbose:
+            print(f"  [MediaStore] Scan notice: {e}")
+        return False
 
 
 class ModelRunner:
@@ -634,8 +653,8 @@ def process_file(
         print(f"FFmpeg muxing failed: {err.decode('utf-8', errors='ignore')}", file=sys.stderr)
         return False
 
-    scan_mediastore(output_file)
     print(f"  Saved: {output_file}")
+    scan_mediastore(output_file, verbose=True)
     return True
 
 
@@ -1344,11 +1363,30 @@ def main():
         default=0.25,
         help="Chunk overlap ratio between 0.05 and 0.75 (default: 0.25, UVR standard)",
     )
+    parser.add_argument(
+        "--scan",
+        nargs="+",
+        metavar="FILE",
+        help="Force rescan existing file(s) into Android MediaStore",
+    )
     args = parser.parse_args()
+
+    # Direct MediaStore scan command
+    scan_targets = args.scan
+    inputs = list(args.inputs)
+    if not scan_targets and inputs and inputs[0].lower() in ("scan", "rescan"):
+        scan_targets = inputs[1:]
+        if not scan_targets:
+            print("Usage: nomelody scan <file1> [file2...]", file=sys.stderr)
+            sys.exit(1)
+
+    if scan_targets:
+        for f in scan_targets:
+            scan_mediastore(f, verbose=True)
+        return
 
     # Determine if live mode is requested
     live_target = args.live
-    inputs = list(args.inputs)
     if not live_target and inputs:
         if inputs[0].lower() == "live":
             if len(inputs) > 1:
