@@ -311,6 +311,10 @@ class ModelRunner:
             config = {}
             if self.threads:
                 config["INFERENCE_NUM_THREADS"] = str(self.threads)
+            if self.precision == "fp16":
+                config["INFERENCE_PRECISION_HINT"] = "f16"
+            elif self.precision == "fp32":
+                config["INFERENCE_PRECISION_HINT"] = "f32"
 
             model = core.read_model(model_path)
             self.compiled_model = core.compile_model(model, ov_device, config)
