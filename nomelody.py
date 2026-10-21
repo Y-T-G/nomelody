@@ -1016,27 +1016,35 @@ def play_live(
     print(" Ready!")
 
     # Launch video player on device
-    if player == "intent":
-        print("Launching default video player...")
-        subprocess.run(
-            ["am", "start", "-a", "android.intent.action.VIEW", "-d", stream_url, "-t", mime_type],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    elif player == "browser":
+    if player == "browser":
         print("Launching browser web player...")
-        subprocess.run(
-            ["termux-open-url", web_url],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        if shutil.which("termux-open-url"):
+            subprocess.run(["termux-open-url", web_url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            import webbrowser
+            webbrowser.open(web_url)
+    elif player == "intent":
+        if shutil.which("am"):
+            print("Launching default video player...")
+            subprocess.run(
+                ["am", "start", "-a", "android.intent.action.VIEW", "-d", stream_url, "-t", mime_type],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            print("Android 'am' command not found, falling back to browser...")
+            import webbrowser
+            webbrowser.open(web_url)
     elif player == "mx":
-        print("Launching MX Player...")
-        subprocess.run(
-            ["am", "start", "-n", "com.mxtech.videoplayer.ad/.ActivityScreen", "-d", stream_url, "-t", mime_type],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        if shutil.which("am"):
+            print("Launching MX Player...")
+            subprocess.run(
+                ["am", "start", "-n", "com.mxtech.videoplayer.ad/.ActivityScreen", "-d", stream_url, "-t", mime_type],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            print("Android 'am' command not found.")
 
     print("\nPress Ctrl+C to stop streaming.\n")
     try:
@@ -1083,9 +1091,9 @@ def main():
     )
     parser.add_argument(
         "--player",
-        choices=["intent", "browser", "mx", "none"],
-        default="intent",
-        help="Player launcher for live mode: 'intent' (default system player), 'browser' (web player), 'mx' (MX Player), or 'none'",
+        choices=["browser", "intent", "mx", "none"],
+        default="browser",
+        help="Player launcher for live mode: 'browser' (default web player), 'intent' (Android system player), 'mx' (MX Player), or 'none'",
     )
     parser.add_argument(
         "--format",
@@ -1155,7 +1163,8 @@ def main():
     # Select backend defaults
     backend = args.backend
     if backend is None:
-        backend = "litert-gpu" if live_target else "onnx"
+        is_android = os.path.exists("/system") or os.environ.get("TERMUX_VERSION") or shutil.which("termux-info")
+        backend = "litert-gpu" if (live_target and is_android) else "onnx"
 
     runner = ModelRunner(
         backend=backend,
