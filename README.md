@@ -8,6 +8,7 @@ Runs completely offline on your device without cloud APIs or gigabytes of heavy 
 
 ## Features
 
+- **Live YouTube Filtering & Streaming**: Plays YouTube videos in real time with background melody filtered out live on-the-fly via local streaming into your favorite Android video player (MX Player, VLC) or built-in HTML5 web player.
 - **Video-First**: Extracts audio, strips background music, and muxes the voice track cleanly back into your video without re-encoding the video stream (`-c:v copy`).
 - **Flexible Acceleration**: Supports both **ONNX Runtime** (auto-detects CUDA / DirectML / CoreML / CPU NEON) and **Google LiteRT GPU** (OpenCL hardware acceleration on Qualcomm Adreno / Mali GPUs).
 - **Fast & Streamlined**: Piped in-memory FFmpeg processing (zero temp files on disk), precomputed fast overlap-add iSTFT vectorization, multithreaded pocketfft, and multi-chunk batching.
@@ -91,6 +92,25 @@ nomelody clip1.mp4 clip2.mp4 podcast.mkv
 ### 6. Custom output file
 ```bash
 nomelody speech.mp4 -o voice_only.mp4
+```
+
+### 7. Live Mode (Play YouTube Videos with Melody Filtered Live)
+Stream and isolate vocals from YouTube videos in real time faster than playback speed:
+```bash
+# Play YouTube URL (auto-launches default Android video player via intent):
+nomelody live "https://www.youtube.com/watch?v=..."
+
+# Play by search query directly:
+nomelody live "song or podcast name"
+
+# Ultra-fast LiteRT CPU static INT8 mode (~1.9x realtime):
+nomelody live "<url>" --backend litert-cpu --precision int8
+
+# Launch in built-in mobile web player (Helium / Chrome):
+nomelody live "<url>" --player browser
+
+# Customize container format or resolution:
+nomelody live "<url>" --quality 1080 --format mkv
 ```
 
 ---
