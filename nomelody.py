@@ -211,7 +211,12 @@ class ModelRunner:
         self.threads = get_optimal_threads(threads)
         self.batch_size = max(1, batch_size)
         if precision is None:
-            precision = "fp16" if backend == "litert-gpu" else "fp32"
+            if backend in ("qnn-dsp", "qti-dsp"):
+                precision = "int8"
+            elif backend == "litert-gpu":
+                precision = "fp16"
+            else:
+                precision = "fp32"
         self.precision = precision
 
         if backend in ("onnx", "onnx-cpu"):
@@ -243,6 +248,8 @@ class ModelRunner:
             available_providers = ort.get_available_providers()
             if backend == "onnx-cpu" or device == "cpu":
                 providers = ["CPUExecutionProvider"]
+            elif device in ("dsp", "npu"):
+                providers = [("NnapiExecutionProvider", {"nnapi_accelerator_name": "qti-dsp"}), "CPUExecutionProvider"]
             elif device == "gpu":
                 preferred = ["CUDAExecutionProvider", "DmlExecutionProvider", "CoreMLExecutionProvider"]
                 providers = [p for p in preferred if p in available_providers]
@@ -329,6 +336,41 @@ class ModelRunner:
                 return np.concatenate(outs, axis=0)
 
             self.infer_fn = _openvino_infer
+
+        elif backend in ("qnn-dsp", "qti-dsp"):
+            try:
+                import onnxruntime as ort
+            except ImportError:
+                print("Error: onnxruntime not found. Install via 'pkg install python-onnxruntime'.", file=sys.stderr)
+                sys.exit(1)
+
+            if custom_model:
+                model_path = custom_model
+            elif self.precision == "int8":
+                model_path = INT8_MODEL_PATH
+                ensure_int8_model(ONNX_MODEL_PATH, INT8_MODEL_PATH)
+                if not os.path.isfile(model_path):
+                    model_path = ONNX_MODEL_PATH
+            else:
+                model_path = ONNX_MODEL_PATH
+                ensure_file(model_path, ONNX_MODEL_URL, "ONNX model (Voc_FT)")
+
+            opts = ort.SessionOptions()
+            opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            opts.intra_op_num_threads = self.threads
+            opts.inter_op_num_threads = 1
+
+            providers = [("NnapiExecutionProvider", {"nnapi_accelerator_name": "qti-dsp"}), "CPUExecutionProvider"]
+            self.session = ort.InferenceSession(model_path, sess_options=opts, providers=providers)
+            self.input_name = self.session.get_inputs()[0].name
+            active_provider = self.session.get_providers()[0]
+            print(f"  Engine: Qualcomm QNN/Hexagon DSP [{active_provider}] | Precision: {self.precision.upper()} | Threads: {self.threads} | Batch size: {self.batch_size}")
+
+            def _qnn_infer(x: np.ndarray) -> np.ndarray:
+                return self.session.run(None, {self.input_name: x})[0]
+
+            self.infer_fn = _qnn_infer
 
         elif backend in ("litert-gpu", "litert-cpu"):
             try:
@@ -1261,15 +1303,15 @@ def main():
     )
     parser.add_argument(
         "--backend",
-        choices=["onnx", "onnx-cpu", "openvino", "litert-gpu", "litert-cpu"],
+        choices=["onnx", "onnx-cpu", "openvino", "litert-gpu", "litert-cpu", "qnn-dsp", "qti-dsp"],
         default=None,
-        help="Inference engine: 'onnx' (default, multi-provider GPU/CPU), 'onnx-cpu' (forced CPU ONNX Runtime), 'openvino' (Intel OpenVINO runtime), 'litert-gpu' (default for live mode, OpenCL GPU), 'litert-cpu' (LiteRT XNNPACK CPU)",
+        help="Inference engine: 'onnx' (default, multi-provider GPU/CPU), 'onnx-cpu' (forced CPU ONNX Runtime), 'qnn-dsp' (Qualcomm Hexagon DSP/NPU via QNN NNAPI), 'openvino' (Intel OpenVINO runtime), 'litert-gpu' (default for live mode, OpenCL GPU), 'litert-cpu' (LiteRT XNNPACK CPU)",
     )
     parser.add_argument(
         "--device",
-        choices=["auto", "cpu", "gpu"],
+        choices=["auto", "cpu", "gpu", "dsp", "npu"],
         default="auto",
-        help="Execution target device for ONNX/OpenVINO: 'auto' (default), 'cpu' (forces CPU inference), or 'gpu'",
+        help="Execution target device for ONNX/OpenVINO: 'auto' (default), 'cpu' (forces CPU inference), 'gpu', or 'dsp'/'npu' (Qualcomm Hexagon DSP)",
     )
     parser.add_argument(
         "--precision",

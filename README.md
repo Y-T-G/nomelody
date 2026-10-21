@@ -95,6 +95,14 @@ nomelody --backend openvino --precision fp32 input_video.mp4
 nomelody --backend litert-cpu input_video.mp4
 ```
 
+### 6. Qualcomm Hexagon NPU / DSP Acceleration (Snapdragon)
+Offloads compute to Qualcomm's Hexagon Tensor Processor (HTP/CDSP) via QNN NNAPI, completely avoiding display freezes:
+```bash
+nomelody --backend qnn-dsp input_video.mp4
+# Or with device selector:
+nomelody --backend onnx --device dsp input_video.mp4
+```
+
 ### 5. Batch processing
 ```bash
 nomelody clip1.mp4 clip2.mp4 podcast.mkv
