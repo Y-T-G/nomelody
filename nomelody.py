@@ -443,12 +443,18 @@ def process_file(
     out_data = (vocal.T * 32767.0).astype(np.int16)
     out_bytes = out_data.tobytes()
 
+    # Apply high-shelf filter on INT8 to remove the 8-bit quantization noise floor
+    audio_filters = []
+    if getattr(runner, "precision", "fp32") == "int8":
+        audio_filters.extend(["-af", "highshelf=f=9500:gain=-15"])
+
     # Mux back directly via ffmpeg stdin pipe (avoids writing temp stem.wav to disk)
     if is_video:
         mux_cmd = [
             "ffmpeg", "-y", "-nostats", "-loglevel", "error", "-i", input_file,
             "-f", "s16le", "-ar", "44100", "-ac", "2", "-i", "pipe:0",
             "-map", "0:v:0", "-map", "1:a:0",
+            *audio_filters,
             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
             output_file,
         ]
@@ -456,6 +462,7 @@ def process_file(
         mux_cmd = [
             "ffmpeg", "-y", "-nostats", "-loglevel", "error",
             "-f", "s16le", "-ar", "44100", "-ac", "2", "-i", "pipe:0",
+            *audio_filters,
             "-c:a", "flac", output_file,
         ]
 
